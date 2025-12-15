@@ -4,6 +4,8 @@ import os
 import cv2
 import random
 
+from keras.src.utils import load_img, img_to_array
+
 
 ######################## 1D RAMP SIGNAL OVER IMAGE ##############################
 
@@ -19,7 +21,7 @@ def create_1d_signal(shape, strength, epsilon):
             signal[i, j] = offset
             # signal[i, j, 0] = offset # channel specific
 
-    cv2.imwrite(os.path.join(curr_dir, "images", "mod", "ramp.jpeg"), signal)
+    # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "ramp.jpeg"), signal)
 
     return signal
 
@@ -40,7 +42,7 @@ def create_2d_signal(shape, strength, freq, epsilon):
             signal[i, j, :] = offset
             # signal[i, j, 0] = offset # channel specific
 
-    cv2.imwrite(os.path.join(curr_dir, "images", "mod", "2dsignal.jpeg"), signal)
+    # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "2dsignal.jpeg"), signal)
 
     return signal
 
@@ -60,7 +62,7 @@ def create_noise(shape, intensity, fraction, epsilon):
 
     noise = noise.reshape(shape)
 
-    cv2.imwrite(os.path.join(curr_dir, "images", "mod", "random_noise.jpeg"), noise)
+    # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "random_noise.jpeg"), noise)
 
     return noise
 
@@ -86,7 +88,7 @@ def find_edges(image, intensity, threshold, epsilon):
             if edges[i, j] > int(threshold * 256):
                 noise[i, j, :] = random.randint(-intensity, intensity)
 
-    cv2.imwrite(os.path.join(curr_dir, "images", "mod", "edge.jpeg"), noise)
+    # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "edge.jpeg"), noise)
 
     return noise
 
@@ -103,22 +105,24 @@ def create_patch(shape, size, epsilon):
             patch[i*2+1, j*2+1] = np.floor(epsilon * 256)
 
 
-    cv2.imwrite(os.path.join(curr_dir, "images", "mod", "patch.jpeg"), patch)
+    # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "patch.jpeg"), patch)
 
     return patch
 
-
+def apply_noise(image, signal):
+    return np.clip(image + signal, 0, 255).astype(np.uint8)
 
 if __name__ == "__main__":
     ########################### PIPELINE ###################################################
     curr_dir = os.getcwd()
     img_path = os.path.join(curr_dir, "images", "espresso.jpeg")
-    img = cv2.imread(img_path)
-    im_copy = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    im_copy = im_copy.astype(np.uint8)
 
-    signal = create_2d_signal(im_copy.shape, 500, 70,
-                              0.3)  # SELECT METHOD, EXCEPT FOR EDGE DET. DONT REGENERATE SIGNAL PER IMAGE
+    img = img_to_array(load_img(img_path)).astype(np.uint8)
+    # im_copy = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    im_copy = img.astype(np.uint8)
+
+    signal = create_2d_signal(im_copy.shape, 100, 50, 0.1)  # SELECT METHOD, EXCEPT FOR EDGE DET. DONT REGENERATE SIGNAL PER IMAG
+    # signal = find_edges(im_copy, 1000, 0.1, 0.1)
     image = np.clip(im_copy + signal, 0, 255).astype(np.uint8)
     # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "mod_im.jpeg"), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 

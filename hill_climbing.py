@@ -17,6 +17,14 @@ from typing import List, Tuple
 from keras.applications import vgg16
 from keras.applications.imagenet_utils import decode_predictions
 from keras.utils import array_to_img, load_img, img_to_array
+from tensorflow.python.keras.backend import epsilon
+
+from mutations import create_patch
+from mutations import find_edges
+from mutations import create_noise
+from mutations import create_2d_signal
+from mutations import create_1d_signal
+from mutations import apply_noise
 
 
 # ============================================================
@@ -38,8 +46,16 @@ def compute_fitness(
               fitness = -probability(predicted_label)
     """
 
+    pred = model.predict(np.expand_dims(image_array, axis=0))
+    decoded = decode_predictions(pred, top=5)
+
+    if decoded[0][0][1] == target_label:
+        return decoded[0][0][2]
+    else:
+        return -decoded[0][0][2]
+
     # TODO (student)
-    raise NotImplementedError("compute_fitness must be implemented by the student.")
+    # raise NotImplementedError("compute_fitness must be implemented by the student.")
 
 
 # ============================================================
@@ -81,8 +97,21 @@ def mutate_seed(
         List[np.ndarray]: mutated neighbors
     """
 
-    # TODO (student)
-    raise NotImplementedError("mutate_seed must be implemented by the student.")
+    # Play around with those
+    img_1d_signal = apply_noise(seed, create_1d_signal(seed.shape, int(np.random.rand() * 10), epsilon))
+    img_2d_signal = apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon))
+    img_noisy = apply_noise(seed, create_noise(seed.shape, 30, 1, epsilon))
+    img_patch = apply_noise(seed, create_patch(seed.shape, int(seed.shape[0]/3), epsilon))
+    img_noisy_edges = apply_noise(seed, find_edges(seed, 1000, 0.1, epsilon))
+
+    # TODO check if the pixels are not changed by more than epsilon
+    return [
+        img_1d_signal,
+        img_2d_signal,
+        img_noisy,
+        img_noisy_edges,
+        img_patch
+    ]
 
 
 
@@ -108,8 +137,9 @@ def select_best(
         (best_image, best_fitness)
     """
 
-    # TODO (student)
-    raise NotImplementedError("select_best must be implemented by the student.")
+    fitness = [compute_fitness(img, model, target_label) for img in candidates]
+    lowest_idx = np.argmin(fitness)
+    return candidates[lowest_idx], fitness[lowest_idx]
 
 
 # ============================================================
@@ -142,8 +172,33 @@ def hill_climb(
         (final_image, final_fitness)
     """
 
+
     # TODO (team work)
-    raise NotImplementedError("hill_climb must be implemented by the team.")
+    img = initial_seed
+    fitness = compute_fitness(seed, model, target_label)
+    accepted = 0
+    for i in range(iterations):
+        # We calculate the epsilon based on how many iterations we have left and how many we have accepted.
+        # Goal of this is that for all epsilon across all accepted iterations to add up to less than 0.3
+        # Feel free to fact-check the formula, not sure if it works
+        proposals = mutate_seed(img, epsilon / (iterations - accepted - i))
+        img_new, fitness_new = select_best(proposals, model, target_label)
+
+        if fitness_new < 0: # we have found an image that breaks the model, return
+            return img_new, fitness_new
+
+        # acceptance probability is based on how the fitness score changed. If it is smaller than before we
+        # accept the new image with probability 1 since fitness/fitness_new > 1 then.
+        # Otherwise we accept with some probability <1 such that the further away our image is from the
+        # ideal (negative) fitness, the less likely is it to accept it.
+        # Shoutout to Metropolis-Hastings
+        accept_prob = min(1.0, fitness / fitness_new)
+        if np.random.rand() < accept_prob:
+            img = img_new
+            fitness = fitness_new
+            accepted += 1
+
+    return img, fitness
 
 
 # ============================================================
@@ -159,7 +214,7 @@ if __name__ == "__main__":
         image_list = json.load(f)
 
     # Pick first entry
-    item = image_list[0]
+    item = image_list[1]
     image_path = "images/" + item["image"]
     target_label = item["label"]
 
@@ -186,7 +241,7 @@ if __name__ == "__main__":
         model=model,
         target_label=target_label,
         epsilon=0.30,
-        iterations=300
+        iterations=40
     )
 
     print("\nFinal fitness:", final_fitness)
