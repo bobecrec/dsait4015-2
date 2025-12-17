@@ -178,7 +178,8 @@ def hill_climb(
     fitness = compute_fitness(seed, model, target_label)
     accepted = 0
     for i in range(iterations-1):
-        epsilon_current = epsilon
+        epsilon_current = epsilon*(i+1)/iterations
+        print(epsilon_current)
         proposals = mutate_seed(img, epsilon_current)
         img_new, _ = select_best(proposals, model, target_label)
         img_new = np.clip(
@@ -189,8 +190,8 @@ def hill_climb(
         fitness_new = compute_fitness(img_new, model, target_label)
 
         print(f"Old: {fitness}, New: {fitness_new}")
-        # if fitness_new < 0: # we have found an image that breaks the model, return
-        #     return img_new, fitness_new
+        if fitness_new < 0: # we have found an image that breaks the model, return
+            return img_new, fitness_new
 
         if fitness_new < fitness:
             img = img_new
@@ -239,8 +240,8 @@ if __name__ == "__main__":
         initial_seed=seed,
         model=model,
         target_label=target_label,
-        epsilon=0.2,
-        iterations=50
+        epsilon=0.3,
+        iterations=100
     )
 
     print("\nFinal fitness:", final_fitness)
