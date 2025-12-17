@@ -39,8 +39,8 @@ def create_2d_signal(shape, strength, freq, epsilon):
     for i in range(shape[0]):
         for j in range(shape[1]):
             offset = int (strength * np.sin(2 * np.pi * (i * j) * freq / shape[0]))
-            signal[i, j, :] = offset
-            # signal[i, j, 0] = offset # channel specific
+            # signal[i, j, :] = offset
+            signal[i, j, np.random.randint(0, 3)] = offset # channel specific
 
     # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "2dsignal.jpeg"), signal)
 
@@ -109,6 +109,7 @@ def create_patch(shape, size, epsilon):
 
     return patch
 
+
 def apply_noise(image, signal):
     return np.clip(image + signal, 0, 255).astype(np.uint8)
 
@@ -121,8 +122,8 @@ if __name__ == "__main__":
     # im_copy = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     im_copy = img.astype(np.uint8)
 
-    signal = create_2d_signal(im_copy.shape, 100, 50, 0.1)  # SELECT METHOD, EXCEPT FOR EDGE DET. DONT REGENERATE SIGNAL PER IMAG
-    # signal = find_edges(im_copy, 1000, 0.1, 0.1)
+    # signal = create_2d_signal(im_copy.shape, 100, 50, 0.1)  # SELECT METHOD, EXCEPT FOR EDGE DET. DONT REGENERATE SIGNAL PER IMAG
+    signal = find_edges(im_copy, 1000, 0.1, 0.3)
     image = np.clip(im_copy + signal, 0, 255).astype(np.uint8)
     # cv2.imwrite(os.path.join(curr_dir, "images", "mod", "mod_im.jpeg"), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
 

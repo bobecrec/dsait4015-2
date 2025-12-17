@@ -18,6 +18,7 @@ from keras.applications import vgg16
 from keras.applications.imagenet_utils import decode_predictions
 from keras.utils import array_to_img, load_img, img_to_array
 from tensorflow.python.keras.backend import epsilon
+from torch import initial_seed
 
 from mutations import create_patch
 from mutations import find_edges
@@ -100,9 +101,9 @@ def mutate_seed(
     # Play around with those
     img_1d_signal = apply_noise(seed, create_1d_signal(seed.shape, int(np.random.rand() * 10), epsilon))
     img_2d_signal = apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon))
-    img_noisy = apply_noise(seed, create_noise(seed.shape, 30, 1, epsilon))
+    img_noisy = apply_noise(seed, create_noise(seed.shape, 30, 0.3, epsilon))
     img_patch = apply_noise(seed, create_patch(seed.shape, int(seed.shape[0]/3), epsilon))
-    img_noisy_edges = apply_noise(seed, find_edges(seed, 1000, 0.1, epsilon))
+    img_noisy_edges = apply_noise(seed, find_edges(seed, 100, 0.4, epsilon))
 
     # TODO check if the pixels are not changed by more than epsilon
     return [
@@ -112,6 +113,7 @@ def mutate_seed(
         img_noisy_edges,
         img_patch
     ]
+    # return candidates
 
 
 
@@ -171,29 +173,26 @@ def hill_climb(
     Returns:
         (final_image, final_fitness)
     """
-
-
     # TODO (team work)
     img = initial_seed
     fitness = compute_fitness(seed, model, target_label)
     accepted = 0
-    for i in range(iterations):
-        # We calculate the epsilon based on how many iterations we have left and how many we have accepted.
-        # Goal of this is that for all epsilon across all accepted iterations to add up to less than 0.3
-        # Feel free to fact-check the formula, not sure if it works
-        proposals = mutate_seed(img, epsilon / (iterations - accepted - i))
-        img_new, fitness_new = select_best(proposals, model, target_label)
+    for i in range(iterations-1):
+        epsilon_current = epsilon
+        proposals = mutate_seed(img, epsilon_current)
+        img_new, _ = select_best(proposals, model, target_label)
+        img_new = np.clip(
+            img_new,
+            initial_seed - epsilon*255,
+            initial_seed + epsilon*255
+        )
+        fitness_new = compute_fitness(img_new, model, target_label)
 
-        if fitness_new < 0: # we have found an image that breaks the model, return
-            return img_new, fitness_new
+        print(f"Old: {fitness}, New: {fitness_new}")
+        # if fitness_new < 0: # we have found an image that breaks the model, return
+        #     return img_new, fitness_new
 
-        # acceptance probability is based on how the fitness score changed. If it is smaller than before we
-        # accept the new image with probability 1 since fitness/fitness_new > 1 then.
-        # Otherwise we accept with some probability <1 such that the further away our image is from the
-        # ideal (negative) fitness, the less likely is it to accept it.
-        # Shoutout to Metropolis-Hastings
-        accept_prob = min(1.0, fitness / fitness_new)
-        if np.random.rand() < accept_prob:
+        if fitness_new < fitness:
             img = img_new
             fitness = fitness_new
             accepted += 1
@@ -214,7 +213,7 @@ if __name__ == "__main__":
         image_list = json.load(f)
 
     # Pick first entry
-    item = image_list[1]
+    item = image_list[2]
     image_path = "images/" + item["image"]
     target_label = item["label"]
 
@@ -240,8 +239,8 @@ if __name__ == "__main__":
         initial_seed=seed,
         model=model,
         target_label=target_label,
-        epsilon=0.30,
-        iterations=40
+        epsilon=0.2,
+        iterations=50
     )
 
     print("\nFinal fitness:", final_fitness)
