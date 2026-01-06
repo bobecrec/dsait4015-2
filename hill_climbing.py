@@ -47,11 +47,11 @@ def compute_fitness(
               fitness = -probability(predicted_label)
     """
 
-    pred = model.predict(np.expand_dims(image_array, axis=0))
+    pred = model.predict(np.expand_dims(image_array, axis=0), verbose=0)
     decoded = decode_predictions(pred, top=5)
 
     if decoded[0][0][1] == target_label:
-        return decoded[0][0][2]
+        return decoded[0][0][2] - decoded[0][1][2]
     else:
         return -decoded[0][0][2]
 
@@ -99,21 +99,25 @@ def mutate_seed(
     """
 
     # Play around with those
-    img_1d_signal = apply_noise(seed, create_1d_signal(seed.shape, int(np.random.rand() * 10), epsilon))
-    img_2d_signal = apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon))
-    img_noisy = apply_noise(seed, create_noise(seed.shape, 30, 0.3, epsilon))
-    img_patch = apply_noise(seed, create_patch(seed.shape, int(seed.shape[0]/3), epsilon))
-    img_noisy_edges = apply_noise(seed, find_edges(seed, 100, 0.4, epsilon))
+    # img_1d_signal = apply_noise(seed, create_1d_signal(seed.shape, int(np.random.rand() * 10), epsilon))
+    # img_2d_signal = apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon))
+    # img_noisy = apply_noise(seed, create_noise(seed.shape, 30, 0.1, epsilon))
+    # img_patch = apply_noise(seed, create_patch(seed.shape, int(seed.shape[0]/3), epsilon))
+    # img_noisy_edges = apply_noise(seed, find_edges(seed, 100, 0.4, epsilon))
 
-    # TODO check if the pixels are not changed by more than epsilon
-    return [
-        img_1d_signal,
-        img_2d_signal,
-        img_noisy,
-        img_noisy_edges,
-        img_patch
-    ]
-    # return candidates
+    # return [
+    #     img_1d_signal,
+    #     img_2d_signal,
+    #     img_noisy,
+    #     img_noisy_edges,
+    #     img_patch
+    # ]
+    candidates = []
+    candidates.extend([apply_noise(seed, create_noise(seed.shape, 300, 5 / (seed.shape[0]*seed.shape[1]), epsilon)) for _ in range(5)])
+    # candidates.extend([apply_noise(seed, find_edges(seed, 100, 0.4, epsilon)) for _ in range(1)])
+    # candidates.append(apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon)))
+    return candidates
+
 
 
 
@@ -178,9 +182,12 @@ def hill_climb(
     fitness = compute_fitness(seed, model, target_label)
     accepted = 0
     for i in range(iterations-1):
+        # Using this as epsilon results in much better images, but it is also much slower
+        # It starts with a very low value and increases it by a bit every iteration which means
+        # the changes are much more subtle
         epsilon_current = epsilon*(i+1)/iterations
-        print(epsilon_current)
-        proposals = mutate_seed(img, epsilon_current)
+
+        proposals = mutate_seed(img, epsilon)
         img_new, _ = select_best(proposals, model, target_label)
         img_new = np.clip(
             img_new,
@@ -189,11 +196,12 @@ def hill_climb(
         )
         fitness_new = compute_fitness(img_new, model, target_label)
 
-        print(f"Old: {fitness}, New: {fitness_new}")
+
         if fitness_new < 0: # we have found an image that breaks the model, return
             return img_new, fitness_new
 
         if fitness_new < fitness:
+            print(f"Old: {fitness}, New: {fitness_new}")
             img = img_new
             fitness = fitness_new
             accepted += 1
@@ -214,7 +222,7 @@ if __name__ == "__main__":
         image_list = json.load(f)
 
     # Pick first entry
-    item = image_list[2]
+    item = image_list[0]
     image_path = "images/" + item["image"]
     target_label = item["label"]
 
