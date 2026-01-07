@@ -11,6 +11,8 @@ DO NOT change function signatures.
 """
 
 import json
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
@@ -19,6 +21,7 @@ from keras.applications.imagenet_utils import decode_predictions
 from keras.utils import array_to_img, load_img, img_to_array
 from tensorflow.python.keras.backend import epsilon
 from torch import initial_seed
+from tqdm import tqdm
 
 from mutations import create_patch
 from mutations import find_edges
@@ -179,7 +182,7 @@ def hill_climb(
     """
     # TODO (team work)
     img = initial_seed
-    fitness = compute_fitness(seed, model, target_label)
+    fitness = compute_fitness(img, model, target_label)
     accepted = 0
     for i in range(iterations-1):
         # Using this as epsilon results in much better images, but it is also much slower
@@ -209,20 +212,8 @@ def hill_climb(
     return img, fitness
 
 
-# ============================================================
-# 5. PROGRAM ENTRY POINT FOR RUNNING A SINGLE ATTACK
-# ============================================================
-
-if __name__ == "__main__":
-    # Load classifier
-    model = vgg16.VGG16(weights="imagenet")
-
-    # Load JSON describing dataset
-    with open("data/image_labels.json") as f:
-        image_list = json.load(f)
-
+def attack_one_image(item, model):
     # Pick first entry
-    item = image_list[0]
     image_path = "images/" + item["image"]
     target_label = item["label"]
 
@@ -263,3 +254,28 @@ if __name__ == "__main__":
     print("\nFinal predictions:")
     for cl in decode_predictions(final_preds, top=5)[0]:
         print(cl)
+
+    return final_img, img, final_preds, target_label
+
+
+# ============================================================
+# 5. PROGRAM ENTRY POINT FOR RUNNING A SINGLE ATTACK
+# ============================================================
+
+if __name__ == "__main__":
+    # Load classifier
+    model = vgg16.VGG16(weights="imagenet")
+
+    # Load JSON describing dataset
+    with open("data/image_labels.json") as f:
+        image_list = json.load(f)
+
+    OUTDIR = "hc_results"
+    os.makedirs(OUTDIR, exist_ok=True)
+
+    item = image_list[2]
+    attack_one_image(item, model)
+
+    for item in tqdm(image_list, desc="Running Black-Box Attacks"):
+        break
+
