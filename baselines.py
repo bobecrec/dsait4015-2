@@ -44,11 +44,13 @@ def compute_perturbation_metrics(x, x_adv, pixel_change_threshold=1.0 / 255.0):
     linf = float(abs_delta.max().item())
     l2 = float(torch.norm(delta.view(-1), p=2).item())
 
-    # count pixels (H*W) where ANY channel exceeds threshold
-    per_pixel_changed = (abs_delta > pixel_change_threshold).any(dim=1)  # [1,H,W]
+    per_pixel_changed = (abs_delta > pixel_change_threshold).any(dim=1)
     num_pixels_changed = int(per_pixel_changed.sum().item())
+    _, C, H, W = abs_delta.shape
+    total_pixels = H * W
+    percentage_pixels = num_pixels_changed/total_pixels
 
-    return linf, l2, num_pixels_changed
+    return linf, l2, num_pixels_changed, percentage_pixels
 
 
 def safe_label_to_index(label_to_index, label):
@@ -111,12 +113,12 @@ fieldnames = [
 
     "fgm_top1_label", "fgm_top1_idx", "fgm_top1_prob",
     "fgm_success", "fgm_changed_pred",
-    "fgm_linf", "fgm_l2", "fgm_num_pixels_changed",
+    "fgm_linf", "fgm_l2", "fgm_num_pixels_changed", "fgm_changed_perc",
     "fgm_runtime_s",
 
     "pgd_top1_label", "pgd_top1_idx", "pgd_top1_prob",
     "pgd_success", "pgd_changed_pred",
-    "pgd_linf", "pgd_l2", "pgd_num_pixels_changed",
+    "pgd_linf", "pgd_l2", "pgd_num_pixels_changed", "pgd_changed_perc",
     "pgd_runtime_s",
 ]
 
@@ -180,7 +182,7 @@ for entry in tqdm(items, desc="Running attacks"):
     fgm_path = IMG_OUTDIR / f"{image_file}_fgm.png"
     save_image(x_fgm, str(fgm_path))
 
-    fgm_linf, fgm_l2, fgm_num_pix = compute_perturbation_metrics(x, x_fgm)
+    fgm_linf, fgm_l2, fgm_num_pix, fgm_perc = compute_perturbation_metrics(x, x_fgm)
     fgm_changed_pred = (
         int(fgm_top1_idx != clean_top1_idx) if (clean_top1_idx != -1 and fgm_top1_idx != -1) else -1
     )
@@ -205,7 +207,7 @@ for entry in tqdm(items, desc="Running attacks"):
     pgd_path = IMG_OUTDIR / f"{image_file}_pgd.png"
     save_image(x_pgd, str(pgd_path))
 
-    pgd_linf, pgd_l2, pgd_num_pix = compute_perturbation_metrics(x, x_pgd)
+    pgd_linf, pgd_l2, pgd_num_pix, pgd_perc = compute_perturbation_metrics(x, x_pgd)
     pgd_changed_pred = (
         int(pgd_top1_idx != clean_top1_idx) if (clean_top1_idx != -1 and pgd_top1_idx != -1) else -1
     )
@@ -228,11 +230,12 @@ for entry in tqdm(items, desc="Running attacks"):
         "fgm_top1_label": fgm_top1_label,
         "fgm_top1_idx": fgm_top1_idx,
         "fgm_top1_prob": fgm_top1_prob,
-        "fgm_success": fgm_success,
         "fgm_changed_pred": fgm_changed_pred,
+        "fgm_success": fgm_success,
         "fgm_linf": fgm_linf,
         "fgm_l2": fgm_l2,
         "fgm_num_pixels_changed": fgm_num_pix,
+        "fgm_changed_perc": fgm_perc,
         "fgm_runtime_s": fgm_runtime,
 
         "pgd_top1_label": pgd_top1_label,
@@ -243,6 +246,7 @@ for entry in tqdm(items, desc="Running attacks"):
         "pgd_linf": pgd_linf,
         "pgd_l2": pgd_l2,
         "pgd_num_pixels_changed": pgd_num_pix,
+        "pgd_changed_perc": pgd_perc,
         "pgd_runtime_s": pgd_runtime,
     }
     writer.writerow(row)
@@ -271,7 +275,8 @@ for entry in tqdm(items, desc="Running attacks"):
             "top5": fgm_top5,
             "success": fgm_success,
             "changed_pred": fgm_changed_pred,
-            "perturbation": {"linf": fgm_linf, "l2": fgm_l2, "num_pixels_changed": fgm_num_pix},
+            "perturbation": {"max_change": fgm_linf, "l2": fgm_l2, "num_pixels_changed": fgm_num_pix,
+                             "percentage_pixels_changed": fgm_perc},
         },
         "pgd": {
             "eps": EPS,
@@ -281,8 +286,9 @@ for entry in tqdm(items, desc="Running attacks"):
             "top1": {"idx": pgd_top1_idx, "label": pgd_top1_label, "prob": pgd_top1_prob},
             "top5": pgd_top5,
             "success": pgd_success,
-            "changed_pred": pgd_changed_pred,
-            "perturbation": {"linf": pgd_linf, "l2": pgd_l2, "num_pixels_changed": pgd_num_pix},
+            "changed_pred": fgm_changed_pred,
+            "perturbation": {"max_change": pgd_linf, "l2": pgd_l2, "num_pixels_changed": pgd_num_pix,
+                             "percentage_pixels_changed": pgd_perc},
         },
     }
     jsonl_file.write(json.dumps(record) + "\n")
