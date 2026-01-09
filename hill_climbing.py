@@ -9,9 +9,11 @@ You MUST implement:
 
 DO NOT change function signatures.
 """
-
+import csv
 import json
 import os
+import time
+from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -212,21 +214,116 @@ def hill_climb(
     return img, fitness
 
 
-def attack_one_image(item, model):
-    # Pick first entry
+def keras_predict_top1(model, image_array: np.ndarray):
+    """
+    image_array: [H,W,C] in [0,255] (float32 ok)
+    Returns: (top1_label: str, top1_prob: float, top1_idx: int, decoded_top5: list)
+    """
+    pred = model.predict(np.expand_dims(image_array, axis=0), verbose=0)  # [1,1000]
+    decoded_top5 = decode_predictions(pred, top=5)[0]  # list of tuples (synset, label, prob)
+
+    top1_label = decoded_top5[0][1]
+    top1_prob = float(decoded_top5[0][2])
+    top1_idx = int(np.argmax(pred[0]))  # 0..999
+
+    return top1_label, top1_prob, top1_idx, decoded_top5
+
+
+def compute_perturbation_metrics_np(x: np.ndarray, x_adv: np.ndarray):
+    """
+    x, x_adv: np arrays [H,W,C] in [0,255]
+    Returns: (linf, l2, num_pixels_changed, percentage_pixels_changed)
+
+    Pixel changed = ANY channel differs (no threshold).
+    """
+    x_f = x.astype(np.float32)
+    x_adv_f = x_adv.astype(np.float32)
+
+    delta = x_adv_f - x_f
+    abs_delta = np.abs(delta)
+
+    linf = float(abs_delta.max())
+    l2 = float(np.linalg.norm(delta.reshape(-1), ord=2))
+
+    per_pixel_changed = (abs_delta > 0).any(axis=2)  # [H,W]
+    num_pixels_changed = int(per_pixel_changed.sum())
+
+    H, W = per_pixel_changed.shape
+    percentage_pixels_changed = num_pixels_changed / float(H * W)
+
+    return linf, l2, num_pixels_changed, percentage_pixels_changed
+
+
+def compute_hc_eval_metrics(
+    seed_img: np.ndarray,
+    adv_img: np.ndarray,
+    model,
+    human_label: str,
+    label_to_index: dict
+):
+    # clean
+    clean_top1_label, clean_top1_prob, clean_top1_idx, _ = keras_predict_top1(model, seed_img)
+
+    # adv
+    hc_top1_label, hc_top1_prob, hc_top1_idx, _ = keras_predict_top1(model, adv_img)
+
+    # ground truth idx from provided imagenet_classes.txt mapping
+    true_idx = label_to_index.get(human_label, -1)
+
+    hc_changed_pred = int(hc_top1_idx != clean_top1_idx) if (clean_top1_idx != -1 and hc_top1_idx != -1) else -1
+    hc_success = int(hc_top1_idx != true_idx) if (true_idx != -1 and hc_top1_idx != -1) else -1
+
+    hc_linf, hc_l2, hc_num_pix, hc_perc = compute_perturbation_metrics_np(seed_img, adv_img)
+
+    return {
+        # clean (optional to log; useful for debugging)
+        "clean_top1_label": clean_top1_label,
+        "clean_top1_idx": clean_top1_idx,
+        "clean_top1_prob": clean_top1_prob,
+
+        # hc
+        "hc_top1_label": hc_top1_label,
+        "hc_top1_idx": hc_top1_idx,
+        "hc_top1_prob": hc_top1_prob,
+        "hc_success": hc_success,
+        "hc_changed_pred": hc_changed_pred,
+        "hc_linf": hc_linf,
+        "hc_l2": hc_l2,
+        "hc_num_pixels_changed": hc_num_pix,
+        "hc_changed_perc": hc_perc,
+    }
+
+def to_jsonable(obj):
+
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    if isinstance(obj, dict):
+        return {k: to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [to_jsonable(v) for v in obj]
+    return obj
+
+
+def attack_one_image(item, model, csv_file, json_file, writer, labels_to_index, IMG_OUTDIR):
     image_path = "images/" + item["image"]
     target_label = item["label"]
+    metrics = {}
 
     print(f"Loaded image: {image_path}")
     print(f"Target label: {target_label}")
 
     img = load_img(image_path)
-    plt.imshow(img)
-    plt.title("Original image")
-    plt.show()
+    # plt.imshow(img)
+    # plt.title("Original image")
+    # plt.show()
 
     img_array = img_to_array(img)
     seed = img_array.copy()
+
 
     # Print baseline top-5 predictions
     print("\nBaseline predictions (top-5):")
@@ -234,6 +331,7 @@ def attack_one_image(item, model):
     for cl in decode_predictions(preds, top=5)[0]:
         print(f"{cl[1]:20s}  prob={cl[2]:.5f}")
 
+    t0 = time.perf_counter()
     # Run hill climbing attack
     final_img, final_fitness = hill_climb(
         initial_seed=seed,
@@ -243,24 +341,85 @@ def attack_one_image(item, model):
         iterations=100
     )
 
+    hc_runtime = time.perf_counter() - t0
+    metrics["runtime"] = hc_runtime
     print("\nFinal fitness:", final_fitness)
 
-    plt.imshow(array_to_img(final_img))
-    plt.title(f"Adversarial Result — fitness={final_fitness:.4f}")
-    plt.show()
+    # plt.imshow(array_to_img(final_img))
+    # plt.title(f"Adversarial Result — fitness={final_fitness:.4f}")
+    # plt.show()
+
+    # -----------------------------
+    # Save adversarial image
+    # -----------------------------
+    image_name = Path(item["image"]).stem
+    hc_img_path = IMG_OUTDIR / f"{image_name}_hc.png"
+
+    array_to_img(final_img).save(hc_img_path)
 
     # Print final predictions
     final_preds = model.predict(np.expand_dims(final_img, axis=0))
     print("\nFinal predictions:")
     for cl in decode_predictions(final_preds, top=5)[0]:
         print(cl)
+    hc_metrics = compute_hc_eval_metrics(
+        seed_img=seed,
+        adv_img=final_img,
+        model=model,
+        human_label=target_label,
+        label_to_index=labels_to_index
+    )
+    metrics.update(hc_metrics)
+    metrics["hc_runtime_s"] = hc_runtime
 
-    return final_img, img, final_preds, target_label
+    row = {
+        "image_file": item["image"],
+        "human_label": target_label,
+
+        "clean_top1_label": metrics["clean_top1_label"],
+        "clean_top1_idx": metrics["clean_top1_idx"],
+        "clean_top1_prob": metrics["clean_top1_prob"],
+
+        "hc_top1_label": metrics["hc_top1_label"],
+        "hc_top1_idx": metrics["hc_top1_idx"],
+        "hc_top1_prob": metrics["hc_top1_prob"],
+
+        "hc_success": metrics["hc_success"],
+        "hc_changed_pred": metrics["hc_changed_pred"],
+
+        "hc_linf": metrics["hc_linf"],
+        "hc_l2": metrics["hc_l2"],
+        "hc_num_pixels_changed": metrics["hc_num_pixels_changed"],
+        "hc_changed_perc": metrics["hc_changed_perc"],
+
+        "hc_runtime_s": metrics["hc_runtime_s"],
+    }
+    writer.writerow(row)
+    csv_file.flush()
+
+    record = {
+        "image": item["image"],
+        "human_label": target_label,
+        "hc": {
+            "runtime_s": metrics["hc_runtime_s"],
+            "top1": {"idx": metrics["hc_top1_idx"], "label": metrics["hc_top1_label"], "prob": metrics["hc_top1_prob"]},
+            "top5": to_jsonable(decode_predictions(final_preds, top=5)[0]),
+            "success": metrics["hc_success"],
+            "changed_pred": metrics["hc_changed_pred"],
+            "perturbation": {
+                "max_change": metrics["hc_linf"],
+                "l2": metrics["hc_l2"],
+                "num_pixels_changed": metrics["hc_num_pixels_changed"],
+                "percentage_pixels_changed": metrics["hc_changed_perc"],
+            }
+        }
+    }
+    json_file.write(json.dumps(record) + "\n")
+    json_file.flush()
+
+    return metrics
 
 
-# ============================================================
-# 5. PROGRAM ENTRY POINT FOR RUNNING A SINGLE ATTACK
-# ============================================================
 
 if __name__ == "__main__":
     # Load classifier
@@ -270,12 +429,39 @@ if __name__ == "__main__":
     with open("data/image_labels.json") as f:
         image_list = json.load(f)
 
-    OUTDIR = "hc_results"
+    with open("data/imagenet_classes.txt", "r") as f:
+        imagenet_labels = [s.strip() for s in f.readlines()]
+
+    label_to_index = {label: i for i, label in enumerate(imagenet_labels)}
+
+    OUTDIR = Path("hc_results")
     os.makedirs(OUTDIR, exist_ok=True)
 
-    item = image_list[2]
-    attack_one_image(item, model)
+    CSV_PATH = OUTDIR / "attack_stats_hc.csv"
+    JSONL_PATH = OUTDIR / "attack_stats_hc.jsonl"
+
+    IMG_OUTDIR = OUTDIR / "images"
+    IMG_OUTDIR.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = [
+        "image_file", "human_label", "clean_top1_label", "clean_top1_idx",
+        "clean_top1_prob", "hc_top1_label", "hc_top1_idx", "hc_top1_prob",
+        "hc_success", "hc_changed_pred",
+        "hc_linf", "hc_l2", "hc_num_pixels_changed", "hc_changed_perc",
+        "hc_runtime_s",
+    ]
+
+    csv_file = open(CSV_PATH, "w", newline="", encoding="utf-8")
+    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+    writer.writeheader()
+
+    jsonl_file = open(JSONL_PATH, "w", encoding="utf-8")
+
+    print(f"Writing CSV to:   {CSV_PATH}")
+    print(f"Writing JSONL to: {JSONL_PATH}")
+
 
     for item in tqdm(image_list, desc="Running Black-Box Attacks"):
-        break
+        attack_one_image(item, model,csv_file, jsonl_file, writer, label_to_index, IMG_OUTDIR)
+
 

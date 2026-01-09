@@ -48,7 +48,7 @@ def compute_perturbation_metrics(x, x_adv, pixel_change_threshold=1.0 / 255.0):
     num_pixels_changed = int(per_pixel_changed.sum().item())
     _, C, H, W = abs_delta.shape
     total_pixels = H * W
-    percentage_pixels = num_pixels_changed/total_pixels
+    percentage_pixels = num_pixels_changed / total_pixels
 
     return linf, l2, num_pixels_changed, percentage_pixels
 
@@ -165,6 +165,9 @@ for entry in tqdm(items, desc="Running attacks"):
     clean_path = IMG_OUTDIR / f"{image_file}_clean.png"
     save_image(x, str(clean_path))
 
+    print(f"\nImage: {image_file}")
+    print(f"Human label: {human_label}")
+    print(f"Model prediction (clean): {clean_top1_label} ({clean_top1_prob:.3f})")
     # =====================================================
     # FGM Attack (timed)
     # =====================================================
@@ -181,6 +184,8 @@ for entry in tqdm(items, desc="Running attacks"):
 
     fgm_path = IMG_OUTDIR / f"{image_file}_fgm.png"
     save_image(x_fgm, str(fgm_path))
+
+    print(f"FGM prediction: {fgm_top1_label} ({fgm_top1_prob:.3f})")
 
     fgm_linf, fgm_l2, fgm_num_pix, fgm_perc = compute_perturbation_metrics(x, x_fgm)
     fgm_changed_pred = (
@@ -206,6 +211,8 @@ for entry in tqdm(items, desc="Running attacks"):
 
     pgd_path = IMG_OUTDIR / f"{image_file}_pgd.png"
     save_image(x_pgd, str(pgd_path))
+
+    print(f"PGD prediction: {pgd_top1_label} ({pgd_top1_prob:.3f})")
 
     pgd_linf, pgd_l2, pgd_num_pix, pgd_perc = compute_perturbation_metrics(x, x_pgd)
     pgd_changed_pred = (
