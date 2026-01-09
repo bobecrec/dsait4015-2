@@ -32,6 +32,7 @@ from mutations import create_2d_signal
 from mutations import create_1d_signal
 from mutations import apply_noise
 
+LABELS_TO_INDEX = {}
 
 # ============================================================
 # 1. FITNESS FUNCTION
@@ -52,17 +53,56 @@ def compute_fitness(
               fitness = -probability(predicted_label)
     """
 
-    pred = model.predict(np.expand_dims(image_array, axis=0), verbose=0)
-    decoded = decode_predictions(pred, top=5)
+    # pred = model.predict(np.expand_dims(image_array, axis=0), verbose=0)
+    # decoded = decode_predictions(pred, top=5)
+    #
+    # if decoded[0][0][1] == target_label:
+    #     return decoded[0][0][2] - decoded[0][1][2]
+    # else:
+    #     return -decoded[0][0][2]
 
-    if decoded[0][0][1] == target_label:
-        return decoded[0][0][2] - decoded[0][1][2]
+    target_idx = LABELS_TO_INDEX.get(target_label)
+
+    pred = model.predict(np.expand_dims(image_array, axis=0), verbose=0)[0]
+
+    top_idx = np.argmax(pred)
+
+    if top_idx == target_idx:
+        p_target = pred[target_idx]
+
+        pred[target_idx] = -1
+        p_second = np.max(pred)
+
+        return p_target - p_second
     else:
-        return -decoded[0][0][2]
+        return -pred[top_idx]
 
-    # TODO (student)
-    # raise NotImplementedError("compute_fitness must be implemented by the student.")
+def compute_fitness_batch(
+    candidates: List[np.ndarray],
+    model,
+    target_label: str
+) -> List[float]:
+    batch = np.stack(candidates, axis=0)
+    batch_preds = model.predict(batch, verbose=0)
 
+    target_idx = LABELS_TO_INDEX.get(target_label)
+
+    fitness_scores = []
+
+    for pred in batch_preds:
+        top_idx = np.argmax(pred)
+
+        if top_idx == target_idx:
+            p_target = pred[target_idx]
+
+            pred[target_idx] = -1
+            p_second = np.max(pred)
+
+            fitness_scores.append(p_target - p_second)
+        else:
+            fitness_scores.append(-pred[top_idx])
+
+    return fitness_scores
 
 # ============================================================
 # 2. MUTATION FUNCTION
@@ -123,9 +163,6 @@ def mutate_seed(
     # candidates.append(apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon)))
     return candidates
 
-
-
-
 # ============================================================
 # 3. SELECT BEST CANDIDATE
 # ============================================================
@@ -148,9 +185,12 @@ def select_best(
         (best_image, best_fitness)
     """
 
-    fitness = [compute_fitness(img, model, target_label) for img in candidates]
-    lowest_idx = np.argmin(fitness)
-    return candidates[lowest_idx], fitness[lowest_idx]
+    # fitness = [compute_fitness(img, model, target_label) for img in candidates]
+    # lowest_idx = np.argmin(fitness)
+    # return candidates[lowest_idx], fitness[lowest_idx]
+    fitness_scores = compute_fitness_batch(candidates, model, target_label)
+    best_idx = np.argmin(fitness_scores)
+    return candidates[best_idx], float(fitness_scores[best_idx])
 
 
 # ============================================================
@@ -206,7 +246,7 @@ def hill_climb(
             return img_new, fitness_new
 
         if fitness_new < fitness:
-            print(f"Old: {fitness}, New: {fitness_new}")
+            print(f"\rOld: {fitness}, New: {fitness_new}", end="", flush=True)
             img = img_new
             fitness = fitness_new
             accepted += 1
@@ -259,8 +299,7 @@ def compute_hc_eval_metrics(
     seed_img: np.ndarray,
     adv_img: np.ndarray,
     model,
-    human_label: str,
-    label_to_index: dict
+    human_label: str
 ):
     # clean
     clean_top1_label, clean_top1_prob, clean_top1_idx, _ = keras_predict_top1(model, seed_img)
@@ -269,7 +308,7 @@ def compute_hc_eval_metrics(
     hc_top1_label, hc_top1_prob, hc_top1_idx, _ = keras_predict_top1(model, adv_img)
 
     # ground truth idx from provided imagenet_classes.txt mapping
-    true_idx = label_to_index.get(human_label, -1)
+    true_idx = LABELS_TO_INDEX.get(human_label, -1)
 
     hc_changed_pred = int(hc_top1_idx != clean_top1_idx) if (clean_top1_idx != -1 and hc_top1_idx != -1) else -1
     hc_success = int(hc_top1_idx != true_idx) if (true_idx != -1 and hc_top1_idx != -1) else -1
@@ -309,10 +348,9 @@ def to_jsonable(obj):
     return obj
 
 
-def attack_one_image(item, model, csv_file, json_file, writer, labels_to_index, IMG_OUTDIR):
+def attack_one_image(item, model, csv_file, json_file, writer, IMG_OUTDIR):
     image_path = "images/" + item["image"]
     target_label = item["label"]
-    metrics = {}
 
     print(f"Loaded image: {image_path}")
     print(f"Target label: {target_label}")
@@ -328,88 +366,95 @@ def attack_one_image(item, model, csv_file, json_file, writer, labels_to_index, 
     for cl in decode_predictions(preds, top=5)[0]:
         print(f"{cl[1]:20s}  prob={cl[2]:.5f}")
 
-    t0 = time.perf_counter()
-    # Run hill climbing attack
-    final_img, final_fitness = hill_climb(
-        initial_seed=seed,
-        model=model,
-        target_label=target_label,
-        epsilon=0.3,
-        iterations=100
-    )
+    epsilon_values = [0.05, 0.1, 0.2, 0.3]
 
-    hc_runtime = time.perf_counter() - t0
-    print("\nFinal fitness:", final_fitness)
+    for epsilon in epsilon_values:
+        print(f"\nEpsilon: {epsilon}")
+        metrics = {}
 
-    # -----------------------------
-    # Save adversarial image
-    # -----------------------------
-    image_name = Path(item["image"]).stem
-    hc_img_path = IMG_OUTDIR / f"{image_name}_hc.png"
+        t0 = time.perf_counter()
+        # Run hill climbing attack
+        final_img, final_fitness = hill_climb(
+            initial_seed=seed,
+            model=model,
+            target_label=target_label,
+            epsilon=epsilon,
+            iterations=5
+        )
 
-    array_to_img(final_img).save(hc_img_path)
+        hc_runtime = time.perf_counter() - t0
+        print("\nFinal fitness:", final_fitness)
 
-    # Print final predictions
-    final_preds = model.predict(np.expand_dims(final_img, axis=0))
-    print("\nFinal predictions:")
-    for cl in decode_predictions(final_preds, top=5)[0]:
-        print(cl)
-    hc_metrics = compute_hc_eval_metrics(
-        seed_img=seed,
-        adv_img=final_img,
-        model=model,
-        human_label=target_label,
-        label_to_index=labels_to_index
-    )
-    metrics.update(hc_metrics)
-    metrics["hc_runtime_s"] = hc_runtime
 
-    row = {
-        "image_file": item["image"],
-        "human_label": target_label,
+        # -----------------------------
+        # Save adversarial image
+        # -----------------------------
+        image_name = Path(item["image"]).stem
+        hc_img_path = IMG_OUTDIR / f"{image_name}_hc.png"
 
-        "clean_top1_label": metrics["clean_top1_label"],
-        "clean_top1_idx": metrics["clean_top1_idx"],
-        "clean_top1_prob": metrics["clean_top1_prob"],
+        array_to_img(final_img).save(hc_img_path)
 
-        "hc_top1_label": metrics["hc_top1_label"],
-        "hc_top1_idx": metrics["hc_top1_idx"],
-        "hc_top1_prob": metrics["hc_top1_prob"],
+        # Print final predictions
+        final_preds = model.predict(np.expand_dims(final_img, axis=0))
+        # print("\nFinal predictions:")
+        # for cl in decode_predictions(final_preds, top=5)[0]:
+        #     print(cl)
+        hc_metrics = compute_hc_eval_metrics(
+            seed_img=seed,
+            adv_img=final_img,
+            model=model,
+            human_label=target_label,
+        )
+        metrics.update(hc_metrics)
+        metrics["hc_runtime_s"] = hc_runtime
+        metrics["hc_epsilon"] = epsilon
 
-        "hc_success": metrics["hc_success"],
-        "hc_changed_pred": metrics["hc_changed_pred"],
+        row = {
+            "image_file": item["image"],
+            "human_label": target_label,
 
-        "hc_linf": metrics["hc_linf"],
-        "hc_l2": metrics["hc_l2"],
-        "hc_num_pixels_changed": metrics["hc_num_pixels_changed"],
-        "hc_changed_perc": metrics["hc_changed_perc"],
+            "clean_top1_label": metrics["clean_top1_label"],
+            "clean_top1_idx": metrics["clean_top1_idx"],
+            "clean_top1_prob": metrics["clean_top1_prob"],
 
-        "hc_runtime_s": metrics["hc_runtime_s"],
-    }
-    writer.writerow(row)
-    csv_file.flush()
+            "hc_top1_label": metrics["hc_top1_label"],
+            "hc_top1_idx": metrics["hc_top1_idx"],
+            "hc_top1_prob": metrics["hc_top1_prob"],
 
-    record = {
-        "image": item["image"],
-        "human_label": target_label,
-        "hc": {
-            "runtime_s": metrics["hc_runtime_s"],
-            "top1": {"idx": metrics["hc_top1_idx"], "label": metrics["hc_top1_label"], "prob": metrics["hc_top1_prob"]},
-            "top5": to_jsonable(decode_predictions(final_preds, top=5)[0]),
-            "success": metrics["hc_success"],
-            "changed_pred": metrics["hc_changed_pred"],
-            "perturbation": {
-                "max_change": metrics["hc_linf"],
-                "l2": metrics["hc_l2"],
-                "num_pixels_changed": metrics["hc_num_pixels_changed"],
-                "percentage_pixels_changed": metrics["hc_changed_perc"],
+            "hc_success": metrics["hc_success"],
+            "hc_changed_pred": metrics["hc_changed_pred"],
+
+            "hc_linf": metrics["hc_linf"],
+            "hc_l2": metrics["hc_l2"],
+            "hc_num_pixels_changed": metrics["hc_num_pixels_changed"],
+            "hc_changed_perc": metrics["hc_changed_perc"],
+
+            "hc_runtime_s": metrics["hc_runtime_s"],
+            "hc_epsilon": metrics["hc_epsilon"]
+        }
+        writer.writerow(row)
+        csv_file.flush()
+
+        record = {
+            "image": item["image"],
+            "human_label": target_label,
+            "hc": {
+                "runtime_s": metrics["hc_runtime_s"],
+                "epsilon": metrics["hc_epsilon"],
+                "top1": {"idx": metrics["hc_top1_idx"], "label": metrics["hc_top1_label"], "prob": metrics["hc_top1_prob"]},
+                "top5": to_jsonable(decode_predictions(final_preds, top=5)[0]),
+                "success": metrics["hc_success"],
+                "changed_pred": metrics["hc_changed_pred"],
+                "perturbation": {
+                    "max_change": metrics["hc_linf"],
+                    "l2": metrics["hc_l2"],
+                    "num_pixels_changed": metrics["hc_num_pixels_changed"],
+                    "percentage_pixels_changed": metrics["hc_changed_perc"],
+                }
             }
         }
-    }
-    json_file.write(json.dumps(record) + "\n")
-    json_file.flush()
-
-    return metrics
+        json_file.write(json.dumps(record) + "\n")
+        json_file.flush()
 
 
 
@@ -424,7 +469,7 @@ if __name__ == "__main__":
     with open("data/imagenet_classes.txt", "r") as f:
         imagenet_labels = [s.strip() for s in f.readlines()]
 
-    label_to_index = {label: i for i, label in enumerate(imagenet_labels)}
+    LABELS_TO_INDEX = {label: i for i, label in enumerate(imagenet_labels)}
 
     OUTDIR = Path("hc_results")
     os.makedirs(OUTDIR, exist_ok=True)
@@ -440,7 +485,7 @@ if __name__ == "__main__":
         "clean_top1_prob", "hc_top1_label", "hc_top1_idx", "hc_top1_prob",
         "hc_success", "hc_changed_pred",
         "hc_linf", "hc_l2", "hc_num_pixels_changed", "hc_changed_perc",
-        "hc_runtime_s",
+        "hc_runtime_s", "hc_epsilon"
     ]
 
     csv_file = open(CSV_PATH, "w", newline="", encoding="utf-8")
@@ -454,6 +499,6 @@ if __name__ == "__main__":
 
 
     for item in tqdm(image_list, desc="Running Black-Box Attacks"):
-        attack_one_image(item, model,csv_file, jsonl_file, writer, label_to_index, IMG_OUTDIR)
+        attack_one_image(item, model,csv_file, jsonl_file, writer, IMG_OUTDIR)
 
 
