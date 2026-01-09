@@ -242,7 +242,8 @@ def compute_perturbation_metrics_np(x: np.ndarray, x_adv: np.ndarray):
     delta = x_adv_f - x_f
     abs_delta = np.abs(delta)
 
-    linf = float(abs_delta.max())
+    # normalize to match PyTorch range [0, 1]
+    linf = float(abs_delta.max()) / 255.0
     l2 = float(np.linalg.norm(delta.reshape(-1), ord=2))
 
     per_pixel_changed = (abs_delta > 0).any(axis=2)  # [H,W]
@@ -317,13 +318,9 @@ def attack_one_image(item, model, csv_file, json_file, writer, labels_to_index, 
     print(f"Target label: {target_label}")
 
     img = load_img(image_path)
-    # plt.imshow(img)
-    # plt.title("Original image")
-    # plt.show()
 
     img_array = img_to_array(img)
     seed = img_array.copy()
-
 
     # Print baseline top-5 predictions
     print("\nBaseline predictions (top-5):")
@@ -342,12 +339,7 @@ def attack_one_image(item, model, csv_file, json_file, writer, labels_to_index, 
     )
 
     hc_runtime = time.perf_counter() - t0
-    metrics["runtime"] = hc_runtime
     print("\nFinal fitness:", final_fitness)
-
-    # plt.imshow(array_to_img(final_img))
-    # plt.title(f"Adversarial Result — fitness={final_fitness:.4f}")
-    # plt.show()
 
     # -----------------------------
     # Save adversarial image
