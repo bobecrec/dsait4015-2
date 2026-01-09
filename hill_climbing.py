@@ -379,7 +379,7 @@ def attack_one_image(item, model, csv_file, json_file, writer, IMG_OUTDIR):
             model=model,
             target_label=target_label,
             epsilon=epsilon,
-            iterations=5
+            iterations=300
         )
 
         hc_runtime = time.perf_counter() - t0
