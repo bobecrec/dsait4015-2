@@ -230,9 +230,9 @@ def hill_climb(
         # Using this as epsilon results in much better images, but it is also much slower
         # It starts with a very low value and increases it by a bit every iteration which means
         # the changes are much more subtle
-        epsilon_current = epsilon*(i+1)/iterations
+        epsilon_current = epsilon*((i+1)/iterations) ** 0.5
 
-        proposals = mutate_seed(img, epsilon)
+        proposals = mutate_seed(img, epsilon_current)
         img_new, _ = select_best(proposals, model, target_label)
         img_new = np.clip(
             img_new,
@@ -471,11 +471,11 @@ if __name__ == "__main__":
 
     LABELS_TO_INDEX = {label: i for i, label in enumerate(imagenet_labels)}
 
-    OUTDIR = Path("hc_results")
+    OUTDIR = Path("hc_results_annealing_polynomial")
     os.makedirs(OUTDIR, exist_ok=True)
 
-    CSV_PATH = OUTDIR / "attack_stats_hc.csv"
-    JSONL_PATH = OUTDIR / "attack_stats_hc.jsonl"
+    CSV_PATH = OUTDIR / "attack_stats_hc_annealing.csv"
+    JSONL_PATH = OUTDIR / "attack_stats_hc_annealing.jsonl"
 
     IMG_OUTDIR = OUTDIR / "images"
     IMG_OUTDIR.mkdir(parents=True, exist_ok=True)
