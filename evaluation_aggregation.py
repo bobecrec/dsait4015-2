@@ -79,39 +79,11 @@ def print_runtime_summary(df_hc, df_wb):
     print("=" * 60)
 
 
-def print_image_difficulty(df_hc, df_wb):
-    print("=" * 60)
-    print("IMAGE DIFFICULTY ANALYSIS")
-    print("=" * 60)
 
-    merged = df_wb.merge(
-        df_hc[["image_file", "hc_success"]],
-        on="image_file",
-        how="inner"
-    )
 
-    merged["all_failed"] = (
-            (~merged["fgm_success"]) &
-            (~merged["pgd_success"]) &
-            (~merged["hc_success"])
-    )
 
-    merged["all_succeeded"] = (
-            merged["fgm_success"] &
-            merged["pgd_success"] &
-            merged["hc_success"]
-    )
 
-    print(f"Images where ALL methods failed:     {merged['all_failed'].sum()}")
-    print(f"Images where ALL methods succeeded:  {merged['all_succeeded'].sum()}")
 
-    print("\nExamples hardest images:")
-    print(merged.loc[merged["all_failed"], "image_file"].head(5).tolist())
-
-    print("\nExamples easiest images:")
-    print(merged.loc[merged["all_succeeded"], "image_file"].head(5).tolist())
-
-    print("=" * 60)
 
 
 # ============================================================
@@ -176,11 +148,44 @@ def plot_runtime_vs_success(df_hc, df_wb):
     plt.show()
 
 
-print_attack_success_summary(df_hc_eps03, df_wb)
-print_perturbation_summary(df_hc_eps03, df_wb)
-print_runtime_summary(df_hc_eps03, df_wb)
-# print_image_difficulty(df_hc_eps03, df_wb)
+# print_attack_success_summary(df_hc_eps03, df_wb)
+# print_perturbation_summary(df_hc_eps03, df_wb)
+# print_runtime_summary(df_hc_eps03, df_wb)
+# # print_image_difficulty(df_hc_eps03, df_wb)
+#
+# plot_success_rates(df_hc_eps03, df_wb)
+# plot_perturbation_tradeoff(df_hc_eps03, df_wb)
+# plot_runtime_vs_success(df_hc_eps03, df_wb)
 
-plot_success_rates(df_hc_eps03, df_wb)
-plot_perturbation_tradeoff(df_hc_eps03, df_wb)
-plot_runtime_vs_success(df_hc_eps03, df_wb)
+#
+# hc_eps_stats = (
+#     df_hc
+#     .groupby("hc_epsilon")
+#     .agg(
+#         avg_runtime_s=("hc_runtime_s", "mean"),
+#         median_runtime_s=("hc_runtime_s", "median"),
+#         avg_pixels_changed=("hc_num_pixels_changed", "mean"),
+#         median_pixels_changed=("hc_num_pixels_changed", "median"),
+#         success_rate=("hc_success", "mean"),
+#         n_samples=("hc_success", "count")
+#     )
+#     .reset_index()
+# )
+# print("=" * 70)
+# print("HILL CLIMBER STATISTICS PER EPSILON")
+# print("=" * 70)
+#
+# for _, r in hc_eps_stats.iterrows():
+#     print(f"\nε = {r.hc_epsilon:.3f}")
+#     print(f"  Samples:              {int(r.n_samples)}")
+#     print(f"  Success rate:         {r.success_rate:.3f}")
+#     print(f"  Avg runtime (s):      {r.avg_runtime_s:.2f}")
+#     print(f"  Median runtime (s):   {r.median_runtime_s:.2f}")
+#     print(f"  Avg pixels changed:   {r.avg_pixels_changed:.1f}")
+#     print(f"  Median pixels:        {r.median_pixels_changed:.1f}")
+#
+# print("=" * 70)
+
+
+
+
