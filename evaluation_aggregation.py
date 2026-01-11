@@ -7,8 +7,19 @@ df_hc = pd.read_csv("hc_results/attack_stats_hc.csv")
 df_hc_eps03 = df_hc[df_hc["hc_epsilon"] == 0.3]
 df_wb = pd.read_csv("attack_results/attack_stats.csv")
 df_wb = df_wb.rename(columns={"image": "image_file"})
-print(df_hc.columns)
-print(df_wb.columns)
+
+
+df_hc_anneal = pd.read_csv("hc_results_annealing/attack_stats_hc_annealing.csv")
+df_hc_anneal_eps03 = df_hc_anneal[df_hc["hc_epsilon"] == 0.3]
+df_hc_anneal_pol = pd.read_csv("hc_results_annealing_polynomial/attack_stats_hc_annealing.csv")
+df_hc_anneal_pol_eps03 = df_hc_anneal_pol[df_hc["hc_epsilon"] == 0.3]
+df_hc_mut = pd.read_csv("hc_results_mutations/attack_stats_hc_more_mutations.csv")
+df_hc_mut_eps03 = df_hc_mut[df_hc["hc_epsilon"] == 0.3]
+
+
+
+# print(df_hc.columns)
+# print(df_wb.columns)
 
 
 # ============================================================
@@ -148,10 +159,17 @@ def plot_runtime_vs_success(df_hc, df_wb):
     plt.show()
 
 
-# print_attack_success_summary(df_hc_eps03, df_wb)
-# print_perturbation_summary(df_hc_eps03, df_wb)
-# print_runtime_summary(df_hc_eps03, df_wb)
-# # print_image_difficulty(df_hc_eps03, df_wb)
+# print_attack_success_summary(df_hc_anneal_eps03, df_wb)
+# print_perturbation_summary(df_hc_anneal_eps03, df_wb)
+# print_runtime_summary(df_hc_anneal_eps03, df_wb)
+#
+# print_attack_success_summary(df_hc_anneal_pol_eps03, df_wb)
+# print_perturbation_summary(df_hc_anneal_pol_eps03, df_wb)
+# print_runtime_summary(df_hc_anneal_pol_eps03, df_wb)
+
+print_attack_success_summary(df_hc_mut_eps03, df_wb)
+print_perturbation_summary(df_hc_mut_eps03, df_wb)
+print_runtime_summary(df_hc_mut_eps03, df_wb)
 #
 # plot_success_rates(df_hc_eps03, df_wb)
 # plot_perturbation_tradeoff(df_hc_eps03, df_wb)
