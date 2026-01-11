@@ -91,4 +91,14 @@ The HC must read input exactly like the baseline:
 **Critical**: A successful attack is defined as any perturbation to the input image that remains within the 
 ε-bounded L∞ constraint (no pixel changes by more than ε) and causes the VGG16 model’s top-1 predicted class to change.
 
+### Run Hill Climbing on the ten images
+
+To run the HC attack on the given ten images and obtain the necessary statistics for evaluation, please run in the same venv as before
+```bash
+python hill_climbing.py
+```
+
+If you wish to use new images, simply add them in the ``images/`` folder and run the same command as above.
+You may mind the plotting code for comparing varying epsilon value performance in the ``evaluation_epsilon_graphs.py`` file and run it with the respecitve name of the saved csv file to obtain plots.
+
 
