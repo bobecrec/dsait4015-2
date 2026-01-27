@@ -161,6 +161,8 @@ def mutate_seed(
     candidates.extend([apply_noise(seed, create_noise(seed.shape, 300, 5 / (seed.shape[0]*seed.shape[1]), epsilon)) for _ in range(5)])
     candidates.extend([apply_noise(seed, find_edges(seed, 100, 0.4, epsilon)) for _ in range(1)])
     candidates.append(apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon)))
+    candidates.append(apply_noise(seed, create_1d_signal(seed.shape, int(np.random.rand() * 10), epsilon)))
+    candidates.append(apply_noise(seed, create_patch(seed.shape, int(seed.shape[0]/3), epsilon)))
     return candidates
 
 # ============================================================
@@ -366,7 +368,8 @@ def attack_one_image(item, model, csv_file, json_file, writer, IMG_OUTDIR):
     for cl in decode_predictions(preds, top=5)[0]:
         print(f"{cl[1]:20s}  prob={cl[2]:.5f}")
 
-    epsilon_values = [0.05, 0.1, 0.2, 0.3]
+    # epsilon_values = [0.05, 0.1, 0.2, 0.3]
+    epsilon_values = [0.3]
 
     for epsilon in epsilon_values:
         print(f"\nEpsilon: {epsilon}")

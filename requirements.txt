@@ -6,7 +6,7 @@ numpy==1.23.5
 pandas==1.4.1
 Pillow==10.1.0
 tensorflow==2.12.0
-tensorflow_intel==2.12.0
+# tensorflow_intel==2.12.0 # only for windows
 torch==2.8.0
 torchvision==0.23.0
 tqdm==4.65.1

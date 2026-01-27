@@ -9,10 +9,8 @@ df_wb = pd.read_csv("attack_results/attack_stats.csv")
 df_wb = df_wb.rename(columns={"image": "image_file"})
 
 
-df_hc_anneal = pd.read_csv("hc_results_annealing_mutations/attack_stats.csv")
+df_hc_anneal = pd.read_csv("hc_results_annealing_polynomial/attack_stats_hc_annealing.csv")
 df_hc_anneal_eps03 = df_hc_anneal[df_hc_anneal["hc_epsilon"] == 0.3]
-
-
 
 
 # print(df_hc.columns)
@@ -85,12 +83,6 @@ def print_runtime_summary(df_hc, df_wb):
         print(f"Max runtime:      {df_wb[f'{method}_runtime_s'].max():.3f}")
 
     print("=" * 60)
-
-
-
-
-
-
 
 
 
