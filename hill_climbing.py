@@ -159,8 +159,8 @@ def mutate_seed(
     # ]
     candidates = []
     candidates.extend([apply_noise(seed, create_noise(seed.shape, 300, 5 / (seed.shape[0]*seed.shape[1]), epsilon)) for _ in range(5)])
-    # candidates.extend([apply_noise(seed, find_edges(seed, 100, 0.4, epsilon)) for _ in range(1)])
-    # candidates.append(apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon)))
+    candidates.extend([apply_noise(seed, find_edges(seed, 100, 0.4, epsilon)) for _ in range(1)])
+    candidates.append(apply_noise(seed, create_2d_signal(seed.shape, 30, int(np.random.rand() * 10), epsilon)))
     return candidates
 
 # ============================================================

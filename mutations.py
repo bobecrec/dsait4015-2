@@ -33,8 +33,8 @@ def create_1d_signal(shape, strength, epsilon):
 def create_2d_signal(shape, strength, freq, epsilon):
     signal = np.zeros((shape[0], shape[1], 3), dtype=np.int32)
 
-    if strength / 256 > epsilon:
-        strength = epsilon * 256
+    if strength / 255 > epsilon:
+        strength = epsilon * 255
 
     for i in range(shape[0]):
         for j in range(shape[1]):
