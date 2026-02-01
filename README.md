@@ -101,4 +101,6 @@ python hill_climbing.py
 If you wish to use new images, simply add them in the ``images/`` folder and run the same command as above.
 You may mind the plotting code for comparing varying epsilon value performance in the ``evaluation_epsilon_graphs.py`` file and run it with the respecitve name of the saved csv file to obtain plots.
 
+### Method Configuration Clarification
 
+It is worth noting that the current method that is called when running the above command is ``attack_one_image``, which is an encapsulating method to perform evaluation of the respective attack. In order to just perform an attack on an image, the standard and provided ``hill_climb`` method signature remains unchanged.
